@@ -82,6 +82,8 @@ class ReservationController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
             'doctor_id' => ['nullable', 'integer', 'exists:users,id'],
             'doctor_schedule_id' => ['nullable', 'integer', 'exists:doctor_schedules,id'],
             'date' => ['nullable', 'date'],
@@ -95,6 +97,21 @@ class ReservationController extends Controller
         ]);
 
         $user = $request->user();
+        $patientPhone = !empty($validated['phone']) ? trim($validated['phone']) : $user->whatsapp;
+        $patientName = !empty($validated['name']) ? trim($validated['name']) : ($user->name ?? 'Pasien');
+
+        // Keep the contact field consistent with the users table schema.
+        if (!empty($patientPhone)) {
+            if (empty($user->whatsapp)) {
+                $user->whatsapp = $user->whatsapp ?: $patientPhone;
+                $user->save();
+            }
+        } else {
+            return response()->json([
+                'message' => 'Nomor WhatsApp atau kontak diperlukan untuk konfirmasi reservasi.'
+            ], 422);
+        }
+
         $scheduleId = $validated['doctor_schedule_id'] ?? null;
         $doctorId = $validated['doctor_id'] ?? null;
         $date = $validated['date'] ?? null;
@@ -174,8 +191,8 @@ class ReservationController extends Controller
             'user_id' => $user->id,
             'doctor_id' => $doctorId,
             'doctor_schedule_id' => $scheduleId,
-            'name' => $user->name,
-            'phone' => $user->whatsapp ?? $user->phone,
+            'name' => $patientName,
+            'phone' => $patientPhone,
             'email' => $user->email,
             'gender' => $user->gender,
             'birth_date' => $user->birth_date,
@@ -235,7 +252,7 @@ class ReservationController extends Controller
             }
 
             // Dispatch Official WhatsApp Notification to Patient via Zesta Gateway
-            $patientPhone = $user->whatsapp ?? $user->phone;
+            $patientPhone = $user->whatsapp;
             if (!empty($patientPhone)) {
                 $docName = $reservation->doctor?->name ?? 'Dokter Spesialis';
                 $formattedDate = optional($reservation->date)->format('d/m/Y') ?? (string) $reservation->date;

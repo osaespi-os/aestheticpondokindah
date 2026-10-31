@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Shared\User\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -73,25 +74,7 @@ class GoogleAuthController extends Controller
             }
         }
 
-        // Mode LOGIN: Tolak jika akun belum terdaftar
-        if ($mode === 'login' && !$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Email belum terdaftar. Silakan lakukan pendaftaran akun terlebih dahulu melalui tab Daftar.',
-                'code' => 'EMAIL_NOT_REGISTERED',
-            ], 404);
-        }
-
-        // Mode REGISTER: Tolak jika akun sudah terdaftar
-        if ($mode === 'register' && $user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Email sudah terdaftar. Silakan masuk melalui halaman login.',
-                'code' => 'EMAIL_ALREADY_REGISTERED',
-            ], 409);
-        }
-
-        // 3. Register new patient jika mode register dan user belum ada
+        // 3. Seamless SSO: Otomatis daftarkan sebagai pasien jika akun belum ada
         if (!$user) {
             $isNewUser = true;
             $user = User::create([
@@ -104,7 +87,7 @@ class GoogleAuthController extends Controller
                 'membership_level' => 'bronze',
                 'membership_status' => 'active',
                 'membership_points' => 0,
-                'email_verified_at' => $emailVerified ? now() : null,
+                'email_verified_at' => $emailVerified ? now() : now(),
                 'avatar' => $avatar,
             ]);
         }
@@ -309,5 +292,206 @@ class GoogleAuthController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * Redirect user to Google OAuth (Universal Web & Mobile Native Bridge)
+     */
+    public function redirectToGoogle(Request $request)
+    {
+        $clientId = config('services.google.client_id') ?: env('GOOGLE_CLIENT_ID');
+        
+        $redirectUri = url('/api/auth/google/callback');
+        if (!str_starts_with($redirectUri, 'https://') && !str_contains($redirectUri, 'localhost') && !str_contains($redirectUri, '127.0.0.1')) {
+            $redirectUri = preg_replace('/^http:/', 'https:', $redirectUri);
+        }
+        if (str_contains($redirectUri, 'aestheticpondokindah.com')) {
+            $redirectUri = 'https://aestheticpondokindah.com/api/auth/google/callback';
+        }
+
+        $returnTo = $request->input('return_to', 'aestheticpondokindah://oauth2redirect');
+        $mode = $request->input('mode', 'login');
+
+        $state = base64_encode(json_encode([
+            'return_to' => $returnTo,
+            'mode' => $mode,
+            'redirect_uri' => $redirectUri,
+            'time' => time(),
+        ]));
+
+        $params = http_build_query([
+            'client_id' => $clientId,
+            'redirect_uri' => $redirectUri,
+            'response_type' => 'code',
+            'scope' => 'openid profile email',
+            'access_type' => 'online',
+            'prompt' => 'select_account',
+            'state' => $state,
+        ]);
+
+        return redirect("https://accounts.google.com/o/oauth2/v2/auth?{$params}");
+    }
+
+    /**
+     * Handle Google OAuth Callback (Exchanges Code, Creates Session, Redirects back to Mobile / Web)
+     */
+    public function handleGoogleCallback(Request $request)
+    {
+        $code = $request->input('code');
+        $stateRaw = $request->input('state');
+        $state = json_decode(base64_decode((string)$stateRaw), true) ?: [];
+        $returnTo = $state['return_to'] ?? 'aestheticpondokindah://oauth2redirect';
+        $mode = $state['mode'] ?? 'login';
+
+        if (empty($code)) {
+            $errorMsg = $request->input('error_description', 'Autentikasi Google dibatalkan.');
+            return $this->renderOAuthBridge($returnTo, ['error' => $errorMsg]);
+        }
+
+        // Check if this exact code was already exchanged by a parallel prefetch request
+        $cacheKey = 'gauth_code_' . md5((string)$code);
+        $cachedPayload = Cache::get($cacheKey);
+        if ($cachedPayload && is_array($cachedPayload)) {
+            return $this->renderOAuthBridge($returnTo, $cachedPayload);
+        }
+
+        $clientId = config('services.google.client_id') ?: env('GOOGLE_CLIENT_ID');
+        $clientSecret = config('services.google.client_secret') ?: env('GOOGLE_CLIENT_SECRET');
+        
+        $redirectUri = $state['redirect_uri'] ?? url('/api/auth/google/callback');
+        if (!str_starts_with($redirectUri, 'https://') && !str_contains($redirectUri, 'localhost') && !str_contains($redirectUri, '127.0.0.1')) {
+            $redirectUri = preg_replace('/^http:/', 'https:', $redirectUri);
+        }
+        if (str_contains($redirectUri, 'aestheticpondokindah.com')) {
+            $redirectUri = 'https://aestheticpondokindah.com/api/auth/google/callback';
+        }
+
+        // Exchange code for token
+        $tokenRes = Http::timeout(10)->asForm()->post('https://oauth2.googleapis.com/token', [
+            'code' => $code,
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'redirect_uri' => $redirectUri,
+            'grant_type' => 'authorization_code',
+        ]);
+
+        if (!$tokenRes->successful()) {
+            // Try standard production callback URI fallback
+            $prodUri = 'https://aestheticpondokindah.com/api/auth/google/callback';
+            if ($redirectUri !== $prodUri) {
+                $retryRes = Http::timeout(10)->asForm()->post('https://oauth2.googleapis.com/token', [
+                    'code' => $code,
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret,
+                    'redirect_uri' => $prodUri,
+                    'grant_type' => 'authorization_code',
+                ]);
+                if ($retryRes->successful()) {
+                    $tokenRes = $retryRes;
+                }
+            }
+        }
+
+        if (!$tokenRes->successful()) {
+            Log::error('Google OAuth token exchange failed', [
+                'status' => $tokenRes->status(),
+                'body' => $tokenRes->body(),
+                'redirect_uri' => $redirectUri,
+                'client_id' => substr($clientId, 0, 15) . '...',
+            ]);
+            $errJson = $tokenRes->json();
+            $errDetail = $errJson['error_description'] ?? $errJson['error'] ?? 'Gagal menukarkan kode otorisasi Google.';
+            return $this->renderOAuthBridge($returnTo, ['error' => 'Gagal menukarkan kode otorisasi Google: ' . $errDetail]);
+        }
+
+        $accessToken = $tokenRes->json('access_token');
+        $idToken = $tokenRes->json('id_token');
+
+        $subRequest = Request::create('/api/auth/google', 'POST', [
+            'access_token' => $accessToken,
+            'credential' => $idToken,
+            'mode' => $mode,
+            'device_name' => 'mobile_native_google',
+        ]);
+
+        $authResponse = $this->handleGoogleAuth($subRequest);
+        $authData = $authResponse->getData(true);
+
+        if (empty($authData['success'])) {
+            return $this->renderOAuthBridge($returnTo, ['error' => $authData['message'] ?? 'Login Google gagal.']);
+        }
+
+        $payload = [
+            'token' => $authData['token'] ?? '',
+            'user' => json_encode($authData['user'] ?? []),
+            'message' => $authData['message'] ?? 'Login berhasil',
+        ];
+
+        Cache::put($cacheKey, $payload, now()->addMinutes(2));
+
+        return $this->renderOAuthBridge($returnTo, $payload);
+    }
+
+    /**
+     * Render HTML Bridge that redirects back to the Mobile Native App or Web
+     */
+    private function renderOAuthBridge(string $returnTo, array $params)
+    {
+        $queryString = http_build_query($params);
+        $separator = str_contains($returnTo, '?') ? '&' : '?';
+        $fullRedirectUrl = $returnTo . $separator . $queryString;
+
+        // For mobile app deep links (Expo Go exp:// or standalone aestheticpondokindah://),
+        // issue a direct HTTP 302 redirect so Chrome Custom Tabs / ASWebAuthenticationSession
+        // intercepts it immediately and closes the browser modal automatically.
+        if (str_starts_with($returnTo, 'aestheticpondokindah://') || str_starts_with($returnTo, 'exp://')) {
+            return redirect()->away($fullRedirectUrl);
+        }
+
+        $hasError = !empty($params['error']);
+        $errorMsg = htmlspecialchars($params['error'] ?? '', ENT_QUOTES, 'UTF-8');
+        $title = $hasError ? 'Informasi Autentikasi' : 'Autentikasi Berhasil';
+        $desc = $hasError ? $errorMsg : 'Sedang mengalihkan kembali ke aplikasi Aesthetic Pondok Indah...';
+        $btnText = $hasError ? 'Kembali ke Aplikasi' : 'Buka Aplikasi';
+        $iconHtml = $hasError
+            ? '<div style="width: 48px; height: 48px; background: #FEE2E2; color: #DC2626; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; margin: 0 auto 16px;">!</div>'
+            : '<div class="spinner"></div>';
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{$title}</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background-color: #FAF8F5; color: #2C2416; }
+        .card { background: white; padding: 32px; border-radius: 20px; border: 1px solid #E8DFC8; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.06); max-width: 360px; margin: 16px; box-sizing: border-box; }
+        .spinner { width: 40px; height: 40px; border: 3px solid #E8DFC8; border-top: 3px solid #C9A24A; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #C9A24A; color: white; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 14px; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {$iconHtml}
+        <h3 style="margin: 0 0 10px; font-size: 18px; color: #2C2416;">{$title}</h3>
+        <p style="font-size: 13px; color: #6B6152; margin: 0; line-height: 1.5;">{$desc}</p>
+        <a id="redirectLink" href="{$fullRedirectUrl}" class="btn">{$btnText}</a>
+    </div>
+    <script>
+        const targetUrl = "{$fullRedirectUrl}";
+        window.location.href = targetUrl;
+        setTimeout(() => {
+            const link = document.getElementById('redirectLink');
+            if (link) link.style.display = 'inline-block';
+        }, 1200);
+    </script>
+</body>
+</html>
+HTML;
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 }

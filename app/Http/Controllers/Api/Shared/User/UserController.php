@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Shared\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Shared\User\User;
+use App\Models\Shared\User\JobOption;
 use App\Models\Patient\Profile\UserProfile;
 use App\Services\Patient\Membership\MembershipService;
 use Illuminate\Http\Request;
@@ -190,6 +191,18 @@ class UserController extends Controller
         return response()->json([
             'doctors' => $doctors,
         ])->header('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+    }
+
+    public function publicJobOptions(): JsonResponse
+    {
+        return response()->json([
+            'jobs' => JobOption::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->pluck('name')
+                ->values(),
+        ])->header('Cache-Control', 'public, max-age=3600');
     }
 
     /**
@@ -554,14 +567,28 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user): JsonResponse
+    public function destroy(Request $request, User $user): JsonResponse
     {
+        if ($request->user() && $user->id === $request->user()->id) {
+            return response()->json(['message' => 'Anda tidak dapat menghapus akun administrator yang sedang aktif digunakan.'], 403);
+        }
+
         $role = $user->role;
-        $user->delete();
+        $userName = $user->name;
+
+        DB::transaction(function () use ($user) {
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
         if ($role === 'doctor') {
             Cache::forget('apig_public_doctors_list');
         }
-        return response()->json(['message' => 'User deleted']);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Pengguna {$userName} berhasil dihapus dari sistem."
+        ]);
     }
 
     public function resetPassword(Request $request, User $user): JsonResponse

@@ -7,7 +7,7 @@ export interface Reservation {
   doctor_name: string | null;
   scheduled_date: string | null;
   scheduled_time: string | null;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'rejected' | 'no_show' | string;
   notes: string | null;
   price: number | null;
   created_at: string;
@@ -47,14 +47,16 @@ export interface Notification {
 // Types — Content
 
 export interface Post {
-  id: number;
+  id: number | string;
   title: string;
   slug: string;
   excerpt: string | null;
-  content: string;
-  thumbnail_url: string | null;
-  published_at: string | null;
-  category: string | null;
+  content?: string;
+  thumbnail_url?: string | null;
+  cover_image_url?: string | null;
+  published_at?: string | null;
+  category?: string | null;
+  reading_time_minutes?: number | null;
 }
 
 export interface GalleryItem {
@@ -67,18 +69,22 @@ export interface GalleryItem {
 export interface Promo {
   id: number;
   title: string;
-  slug: string;
-  description: string;
-  discount_text: string | null;
-  thumbnail_url: string | null;
-  valid_until: string | null;
+  slug?: string;
+  headline?: string | null;
+  description?: string | null;
+  discount_text?: string | null;
+  category?: string | null;
+  image_url?: string | null;
+  thumbnail_url?: string | null;
+  valid_until?: string | null;
 }
 
 export interface Popup {
   id: number;
-  title: string | null;
-  headline: string | null;
-  message: string | null;
-  button_label: string | null;
-  image_url: string | null;
+  title?: string | null;
+  headline?: string | null;
+  message?: string | null;
+  button_label?: string | null;
+  cta_text?: string | null;
+  image_url?: string | null;
 }

@@ -20,8 +20,8 @@ export interface User {
   name: string;
   email: string | null;
   phone: string;
-  role: 'user' | 'clinic_admin' | 'doctor';
-  membership_level: 'bronze' | 'gold' | 'platinum' | 'diamond';
+  role: 'user' | 'patient' | 'clinic_admin' | 'doctor' | 'admin' | string;
+  membership_level: 'bronze' | 'gold' | 'platinum';
   membership_status: 'active' | 'inactive' | 'expired';
   membership_expires_at: string | null;
   total_transactions: number;

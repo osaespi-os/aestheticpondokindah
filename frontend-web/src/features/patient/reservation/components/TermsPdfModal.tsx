@@ -227,7 +227,7 @@ export default function TermsPdfModal({
             <div class="kop-title">Aesthetic Pondok Indah</div>
             <div class="kop-address">
               Jl. Niaga Hijau Raya No.49, Pd. Pinang, Kec. Kby. Lama, Kota Jakarta Selatan, DKI Jakarta 12310<br/>
-              Telepon: 021-7695948 | WhatsApp: 0812-3456-7890 | Email: aesthetic.pondokindah@gmail.com
+              Telepon: 021-7695948 | WhatsApp: 0819-9011-4949 | Email: aesthetic.pondokindah@gmail.com
             </div>
           </div>
 
@@ -307,15 +307,51 @@ export default function TermsPdfModal({
     frameDoc.write(printContent);
     frameDoc.close();
 
-    setTimeout(() => {
-      printFrame.contentWindow?.focus();
-      printFrame.contentWindow?.print();
+    const images = Array.from(frameDoc.querySelectorAll("img"));
+    let hasPrinted = false;
+
+    const executePrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
       setTimeout(() => {
-        if (document.body.contains(printFrame)) {
-          document.body.removeChild(printFrame);
+        try {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+        } catch {
+          window.print();
         }
-      }, 1500);
-    }, 350);
+        setTimeout(() => {
+          if (document.body.contains(printFrame)) {
+            document.body.removeChild(printFrame);
+          }
+        }, 3000);
+      }, 200);
+    };
+
+    if (images.length === 0) {
+      executePrint();
+    } else {
+      let loadedCount = 0;
+      const onImageLoaded = () => {
+        loadedCount++;
+        if (loadedCount >= images.length) {
+          executePrint();
+        }
+      };
+
+      images.forEach((img) => {
+        if (img.complete && img.naturalHeight !== 0) {
+          onImageLoaded();
+        } else {
+          img.onload = onImageLoaded;
+          img.onerror = onImageLoaded;
+        }
+      });
+
+      setTimeout(() => {
+        executePrint();
+      }, 1200);
+    }
   };
 
   if (!isOpen) return null;
@@ -387,7 +423,7 @@ export default function TermsPdfModal({
               </h1>
               <p className="text-[10px] text-gray-700 leading-snug pt-0.5">
                 Jl. Niaga Hijau Raya No.49, Pd. Pinang, Kec. Kby. Lama, Kota Jakarta Selatan, DKI Jakarta 12310<br />
-                Telepon: 021-7695948 | WhatsApp: 0812-3456-7890 | Email: aesthetic.pondokindah@gmail.com
+                Telepon: 021-7695948 | WhatsApp: 0819-9011-4949 | Email: aesthetic.pondokindah@gmail.com
               </p>
             </div>
 

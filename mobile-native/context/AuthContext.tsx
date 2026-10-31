@@ -1,17 +1,21 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { registerForPushNotifications } from '@/services/pushNotificationService';
 import { authStorage } from '@/storage/authStorage';
 import { authService } from '@/services/authService';
 import { router } from 'expo-router';
-import type { User } from '@/types/auth';
+import type { User, RegisterPayload } from '@/types/auth';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (phoneOrEmail: string, password: string) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<void>;
+  loginGoogle: (payload: { credential?: string; access_token?: string; code?: string; mode?: 'login' | 'register' }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  setAuthSession: (token: string, user: User) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -40,10 +44,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const login = useCallback(async (phone: string, password: string) => {
-    const res = await authService.login({ phone, password });
+  const setAuthSession = useCallback(async (newToken: string, newUser: User) => {
+    if (newUser?.role === 'doctor' || newUser?.role === 'clinic_admin' || newUser?.role === 'admin') {
+      await authStorage.clearAll();
+      throw new Error('Aplikasi mobile ini khusus untuk Pasien. Akun Dokter dan Admin silakan login melalui portal web klinik.');
+    }
+    await authStorage.saveToken(newToken);
+    await authStorage.saveUser(newUser);
+    setToken(newToken);
+    setUser(newUser);
+    registerForPushNotifications();
+    router.replace('/(tabs)');
+  }, []);
+
+  const routeByRole = (role?: string) => {
+    if (role === 'doctor' || role === 'clinic_admin' || role === 'admin') {
+      throw new Error('Aplikasi mobile ini khusus untuk Pasien. Akun Dokter dan Admin silakan login melalui portal web klinik.');
+    }
+    router.replace('/(tabs)');
+  };
+
+  const login = useCallback(async (phoneOrEmail: string, password: string) => {
+    const res = await authService.login({ login: phoneOrEmail, password });
+    if (res.user?.role === 'doctor' || res.user?.role === 'clinic_admin' || res.user?.role === 'admin') {
+      await authStorage.clearAll();
+      throw new Error('Aplikasi mobile ini khusus untuk Pasien. Akun Dokter dan Admin silakan login melalui portal web klinik.');
+    }
     setToken(res.token);
     setUser(res.user);
+    registerForPushNotifications();
+    router.replace('/(tabs)');
+  }, []);
+
+  const register = useCallback(async (payload: RegisterPayload) => {
+    const res = await authService.register(payload);
+    setToken(res.token);
+    setUser(res.user);
+    registerForPushNotifications();
+    router.replace('/(tabs)');
+  }, []);
+
+  const loginGoogle = useCallback(async (payload: { credential?: string; access_token?: string; code?: string; mode?: 'login' | 'register' }) => {
+    const res = await authService.loginGoogle(payload);
+    if (res.user?.role === 'doctor' || res.user?.role === 'clinic_admin' || res.user?.role === 'admin') {
+      await authStorage.clearAll();
+      throw new Error('Aplikasi mobile ini khusus untuk Pasien. Akun Dokter dan Admin silakan login melalui portal web klinik.');
+    }
+    setToken(res.token);
+    setUser(res.user);
+    registerForPushNotifications();
     router.replace('/(tabs)');
   }, []);
 
@@ -58,6 +107,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUser = useCallback(async () => {
     try {
+      const storedToken = await authStorage.getToken();
+      if (storedToken && !token) {
+        setToken(storedToken);
+      }
       const res = await authService.me();
       if (res?.user) {
         setUser(res.user);
@@ -66,7 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // Silent refresh failure
     }
-  }, []);
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{
@@ -75,8 +128,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated: !!token && !!user,
       isLoading,
       login,
+      register,
+      loginGoogle,
       logout,
       refreshUser,
+      setAuthSession,
     }}>
       {children}
     </AuthContext.Provider>

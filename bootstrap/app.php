@@ -16,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserRole::class,
         ]);
@@ -29,6 +31,13 @@ return Application::configure(basePath: dirname(__DIR__))
             // Let Laravel render expected client errors with their real status
             // codes. Returning every exception as 500 hid expired/missing
             // authentication tokens from the frontend.
+            if ($e instanceof AuthenticationException
+                && ($request->is('api/*') || $request->expectsJson())) {
+                return response()->json([
+                    'message' => 'Unauthenticated.',
+                ], 401);
+            }
+
             if ($e instanceof AuthenticationException
                 || $e instanceof ValidationException
                 || $e instanceof HttpExceptionInterface) {

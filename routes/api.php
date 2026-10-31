@@ -105,6 +105,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/otp/send', [OtpController::class, 'sendOtp']);
     Route::post('/otp/verify', [OtpController::class, 'verifyOtp']);
     Route::post('/google', [GoogleAuthController::class, 'handleGoogleAuth']);
+    Route::get('/google/redirect', [GoogleAuthController::class, 'redirectToGoogle']);
+    Route::get('/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
     Route::middleware('auth:sanctum')->post('/google/link', [GoogleAuthController::class, 'linkGoogle']);
     Route::middleware('auth:sanctum')->post('/google/unlink', [GoogleAuthController::class, 'unlinkGoogle']);
     Route::middleware('auth:sanctum')->get('/google/status', [GoogleAuthController::class, 'getGoogleStatus']);
@@ -483,6 +485,7 @@ Route::prefix('public')->group(function () {
     Route::get('/public/promos/{slug}', [ContentController::class, 'promoBySlug']);
     Route::get('/doctor-schedules', [DoctorScheduleController::class, 'publicIndex']);
     Route::get('/doctors', [UserController::class, 'publicDoctors']);
+    Route::get('/job-options', [UserController::class, 'publicJobOptions']);
     Route::get('/specializations', [UserController::class, 'specializations']);
     Route::get('/branches', [BranchController::class, 'index']);
     Route::get('/membership/tiers', [UserMembershipController::class, 'tiers']);
@@ -505,6 +508,17 @@ Route::get('/doctors', [UserController::class, 'publicDoctors']);
 Route::get('/specializations', [UserController::class, 'specializations']);
 Route::get('/services', [ClinicServicePublicController::class, 'index']);
 Route::get('/branches', [BranchController::class, 'index']);
+Route::get('/posts', [ContentController::class, 'posts']);
+Route::get('/posts/{slug}', [ContentController::class, 'postBySlug']);
+
+// Global CORS preflight handler for mobile native & web clients
+Route::options('/{any}', function () {
+    return response('', 204)
+        ->header('Access-Control-Allow-Origin', '*')
+        ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-App-Version, X-Client, *')
+        ->header('Access-Control-Max-Age', '86400');
+})->where('any', '.*');
 
 // =========================================================================
 // 7. WEBHOOKS & EXTERNAL CALLBACKS
@@ -521,4 +535,11 @@ Route::get('/push/vapid-public-key', [WebPushSubscriptionController::class, 'get
 Route::post('/push/subscribe', [WebPushSubscriptionController::class, 'subscribe']);
 Route::post('/push/unsubscribe', [WebPushSubscriptionController::class, 'unsubscribe']);
 Route::post('/push/test', [WebPushSubscriptionController::class, 'testPush']);
+
+// =========================================================================
+// 8. OPENAPI & SWAGGER SPECIFICATION ENDPOINTS
+// =========================================================================
+Route::get('/openapi.json', [\App\Http\Controllers\Api\Shared\Docs\OpenApiController::class, 'schema']);
+Route::get('/docs/schema', [\App\Http\Controllers\Api\Shared\Docs\OpenApiController::class, 'schema']);
+
 

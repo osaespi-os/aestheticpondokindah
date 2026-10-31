@@ -1,15 +1,9 @@
 // API Base URL — Aesthetic Pondok Indah
-// Production: https://aestheticpondokindah.com/api
+// Production API: https://aestheticpondokindah.com/api
+// Production Storage: https://aestheticpondokindah.com/storage
 
-export const API_BASE =
-  process.env.NODE_ENV === 'development'
-    ? 'http://10.0.2.2:8000/api' // Android emulator localhost alias
-    : 'https://aestheticpondokindah.com/api';
-
-export const STORAGE_BASE =
-  process.env.NODE_ENV === 'development'
-    ? 'http://10.0.2.2:8000/storage'
-    : 'https://aestheticpondokindah.com/storage';
+export const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://aestheticpondokindah.com/api';
+export const STORAGE_BASE = process.env.EXPO_PUBLIC_STORAGE_URL || 'https://aestheticpondokindah.com/storage';
 
 export const getStorageUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
@@ -32,17 +26,22 @@ export const ENDPOINTS = {
   // User
   PROFILE: '/user/profile',
   PROFILE_UPDATE: '/user/profile',
-  CHANGE_PASSWORD: '/user/change-password',
+  CHANGE_PASSWORD: '/user/password',
 
   // Membership
   MEMBERSHIP: '/membership',
   MEMBERSHIP_TIERS: '/membership/tiers',
+  PUBLIC_MEMBERSHIP_TIERS: '/public/membership/tiers',
+  MEMBERSHIP_PROFILE: '/membership/profile',
   MEMBERSHIP_UPGRADE: '/membership/upgrade',
+  MEMBERSHIP_REQUEST_UPGRADE: '/membership/request-upgrade',
   MEMBERSHIP_RENEW: '/membership/renew',
   MEMBERSHIP_CANCEL: '/membership/cancel',
   MEMBERSHIP_HISTORY: '/membership/history',
   MEMBERSHIP_POINTS: '/membership/points',
+  MEMBERSHIP_TRANSACTIONS: '/membership/transactions',
   MEMBERSHIP_REDEEM: '/membership/redeem-points',
+  MEMBERSHIP_PAYMENT_OPTIONS: '/membership/payment/options',
   MEMBERSHIP_PAYMENT_CREATE: '/membership/payment/create',
   MEMBERSHIP_PAYMENT_SIMULATE: (id: string) => `/membership/payment/simulate/${id}`,
 
@@ -52,15 +51,23 @@ export const ENDPOINTS = {
   RESERVATIONS: '/user/reservations',
   RESERVATION_CREATE: '/user/reservations',
 
-  // Notifications
-  NOTIFICATIONS: '/notifications',
-  NOTIFICATIONS_UNREAD: '/notifications/unread-count',
-  NOTIFICATIONS_READ: (id: string) => `/notifications/${id}/read`,
-  NOTIFICATIONS_READ_ALL: '/notifications/read-all',
-  NOTIFICATIONS_DELETE: (id: string) => `/notifications/${id}`,
-  NOTIFICATIONS_CLEAR: '/notifications/clear',
-  DEVICE_TOKENS: '/notifications/device-token',
-  DEVICE_TOKENS_DELETE: (token: string) => `/notifications/device-token/${token}`,
+  // Consultations (Patient)
+  CONSULTATIONS: '/user/consultations',
+  CONSULTATION_DETAIL: (id: string | number) => `/user/consultations/${id}`,
+  CONSULTATION_MESSAGES: (id: string | number) => `/user/consultations/${id}/messages`,
+  CONSULTATION_READ: (id: string | number) => `/user/consultations/${id}/read`,
+  CONSULTATION_CLOSE: (id: string | number) => `/user/consultations/${id}/close`,
+  CONSULTATION_MEETINGS: (id: string | number) => `/user/consultations/${id}/meetings`,
+
+  // Notifications (User Scoped)
+  NOTIFICATIONS: '/user/notifications',
+  NOTIFICATIONS_UNREAD: '/user/notifications/unread-count',
+  NOTIFICATIONS_READ: (id: string) => `/user/notifications/${id}/read`,
+  NOTIFICATIONS_READ_ALL: '/user/notifications/read-all',
+  NOTIFICATIONS_DELETE: (id: string) => `/user/notifications/${id}`,
+  NOTIFICATIONS_CLEAR: '/user/notifications',
+  DEVICE_TOKENS: '/user/device-token',
+  DEVICE_TOKENS_DELETE: '/user/device-token',
 
   // Content (Public)
   POSTS: '/public/posts',
@@ -74,6 +81,15 @@ export const ENDPOINTS = {
   // Doctor Schedules
   DOCTOR_SCHEDULES: '/doctor-schedules',
 
-  // Services
+  // Services & Settings
   SERVICES: '/services',
+  PUBLIC_SERVICES: '/public/services',
+  BRANCHES: '/public/branches',
+  SETTINGS: '/public/settings',
+
+  // Wilayah Indonesia (Public)
+  WILAYAH_PROVINCES: '/wilayah/provinsi',
+  WILAYAH_REGENCIES: (provinceId: string | number) => `/wilayah/kabupaten/${provinceId}`,
+  WILAYAH_DISTRICTS: (regencyId: string | number) => `/wilayah/kecamatan/${regencyId}`,
+  WILAYAH_VILLAGES: (districtId: string | number) => `/wilayah/kelurahan/${districtId}`,
 } as const;
