@@ -23,4 +23,6 @@ return [
     'callback_url' => env('DOKU_CALLBACK_URL'),
 
     'callback_url_cancel' => env('DOKU_CALLBACK_URL_CANCEL'),
+
+    'webhook_url' => env('DOKU_WEBHOOK_URL'),
 ];

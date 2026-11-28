@@ -160,10 +160,25 @@ class DokuService
             }
         }
 
+        $rawWebhookUrl = (string) ($orderData['webhook_url']
+            ?? Config::get('doku.webhook_url')
+            ?: (rtrim((string) Config::get('app.url', 'https://aestheticpondokindah.com'), '/') . '/api/payment/doku-webhook'));
+
+        $webhookUrl = (
+            trim($rawWebhookUrl) === ''
+            || str_starts_with($rawWebhookUrl, 'http://localhost')
+            || str_starts_with($rawWebhookUrl, 'http://127.0.0.1')
+        )
+            ? 'https://aestheticpondokindah.com/api/payment/doku-webhook'
+            : $rawWebhookUrl;
+
         $payload = [
             'order' => $orderPayload,
             'payment' => [
                 'payment_due_date' => $this->paymentDueDate,
+            ],
+            'additional_info' => [
+                'doku_wallet_notify_url' => $webhookUrl,
             ],
         ];
 
