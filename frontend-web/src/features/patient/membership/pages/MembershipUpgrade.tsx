@@ -190,6 +190,30 @@ export default function MembershipUpgradePage() {
         return;
       }
 
+      // Trigger DOKU Checkout API payment and redirect user to hosted payment.url
+      const dokuRes = await fetch(`${API_BASE}/payment/doku/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          target_level: option.level,
+        }),
+      });
+
+      const dokuData = await dokuRes.json().catch(() => null);
+      if (dokuRes.ok && dokuData?.success && dokuData?.data?.payment_url) {
+        window.location.href = dokuData.data.payment_url;
+        return;
+      }
+
+      if (dokuRes.status !== 503 && dokuData?.code !== "DOKU_NOT_CONFIGURED") {
+        setError(dokuData?.message || "Gagal membuat tautan pembayaran DOKU. Silakan coba lagi.");
+        return;
+      }
+
       let orderId = `UPG-${Date.now().toString().slice(-6)}`;
 
       try {

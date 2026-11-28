@@ -1,29 +1,26 @@
 /**
  * Production Service Worker — Aesthetic Pondok Indah Dental Clinic PWA
- * Version: 2.2.0
+ * Version: 2.0.0
  */
 
-const CACHE_STATIC_NAME = 'apig-static-v2.2.0';
-const CACHE_DYNAMIC_NAME = 'apig-dynamic-v2.2.0';
-const CACHE_API_NAME = 'apig-api-v2.2.0';
+const CACHE_STATIC_NAME = 'apig-static-v2.0.0';
+const CACHE_DYNAMIC_NAME = 'apig-dynamic-v2.0.0';
+const CACHE_API_NAME = 'apig-api-v2.0.0';
 
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/offline.html',
   '/manifest.json',
-  '/logo/logo.webp',
+  '/logo/logo.png',
   '/logo/logo-vertikal.webp',
   '/robots.txt'
 ];
 
-// Security Exclusions - NEVER cache auth, private user data, analytics, or payment transactions
+// Security Exclusions - NEVER cache auth, private user data, or payment transactions
 const EXCLUDED_PATTERNS = [
   /\/api\/auth\//,
-  /\/api\/admin\//,
-  /\/api\/doctor\//,
-  /\/api\/user\//,
-  /\/api\/analytics\//,
+  /\/api\/user\/profile/,
   /\/api\/membership\/payment\//,
   /\/setup_backend\.php/,
   /\/data_setup\.php/

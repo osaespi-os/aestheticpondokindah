@@ -61,6 +61,7 @@ use App\Http\Controllers\Api\Doctor\Odontogram\OdontogramController;
 // =========================================================================
 use App\Http\Controllers\Api\Patient\Membership\MembershipController as UserMembershipController;
 use App\Http\Controllers\Api\Patient\Membership\MembershipPaymentController as UserMembershipPaymentController;
+use App\Http\Controllers\Api\Patient\Billing\DokuPaymentController;
 use App\Http\Controllers\Api\Patient\Billing\PaymentController as UserPaymentController;
 use App\Http\Controllers\Api\Patient\Complaint\ComplaintController as UserComplaintController;
 use App\Http\Controllers\Api\Patient\Notification\NotificationController as UserNotificationController;
@@ -349,6 +350,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user/payments', [UserPaymentController::class, 'index']);
     Route::post('/user/invoices/{id}/payment', [UserPaymentController::class, 'createPayment']);
     Route::get('/user/payments/{id}', [UserPaymentController::class, 'show']);
+    Route::post('/payment/doku/create', [DokuPaymentController::class, 'createPayment']);
 
     // Notifications
     Route::get('/user/notifications', [UserNotificationController::class, 'index']);
@@ -536,6 +538,7 @@ Route::options('/{any}', function (\Illuminate\Http\Request $request) {
 // 7. WEBHOOKS & EXTERNAL CALLBACKS
 // =========================================================================
 Route::post('/membership/payment/webhook', [UserMembershipPaymentController::class, 'webhook']);
+Route::post('/payment/doku-webhook', [DokuPaymentController::class, 'webhook']);
 
 
 
