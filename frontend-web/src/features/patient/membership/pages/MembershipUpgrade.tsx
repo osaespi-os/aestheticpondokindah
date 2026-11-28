@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
@@ -17,8 +17,17 @@ import {
   Info,
   TrendingUp,
   CreditCard,
-  AlertCircle
+  AlertCircle,
+  X,
+  ExternalLink
 } from "lucide-react";
+
+const DOKU_POPUP_ORIGINS = [
+  "https://checkout.doku.com",
+  "https://jokul.doku.com",
+  "https://sandbox.doku.com",
+  "https://staging.doku.com",
+];
 
 const tierIcons = {
   bronze: Star,
@@ -95,11 +104,16 @@ export default function MembershipUpgradePage() {
   const [unmetRequirements, setUnmetRequirements] = useState<Array<{ message: string; action: string }>>([]);
   const [showRequirementsDialog, setShowRequirementsDialog] = useState(false);
 
-  useEffect(() => {
-    fetchUpgradeOptions();
-  }, []);
+  const [checkoutPopup, setCheckoutPopup] = useState<{
+    iframeUrl: string;
+    rawUrl: string;
+    orderId: string;
+    targetLabel: string;
+    priceFormatted: string;
+  } | null>(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
-  const fetchUpgradeOptions = async () => {
+  const fetchUpgradeOptions = useCallback(async () => {
     try {
       const token = getMembershipAuthToken();
       
@@ -147,7 +161,47 @@ export default function MembershipUpgradePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchUpgradeOptions();
+  }, [fetchUpgradeOptions]);
+
+  const handleCloseCheckoutPopup = useCallback(() => {
+    setCheckoutPopup(null);
+    setIframeLoaded(false);
+    fetchUpgradeOptions();
+  }, [fetchUpgradeOptions]);
+
+  useEffect(() => {
+    if (!checkoutPopup) return;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleMessage = (event: MessageEvent) => {
+      if (!DOKU_POPUP_ORIGINS.includes(event.origin)) return;
+      const data = event.data;
+      if (data && typeof data === "object" && data.func === "closeJokul") {
+        handleCloseCheckoutPopup();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCloseCheckoutPopup();
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [checkoutPopup, handleCloseCheckoutPopup]);
 
   const handleUpgrade = async (option: UpgradeOption) => {
     if (unmetRequirements.length > 0) {
@@ -168,7 +222,7 @@ export default function MembershipUpgradePage() {
         return;
       }
 
-      // Trigger DOKU Checkout API payment and redirect user to hosted payment.url
+      // Trigger DOKU Checkout API payment and open official DOKU popup (?view=iframe)
       const dokuRes = await fetch(`${API_BASE}/payment/doku/create`, {
         method: "POST",
         headers: {
@@ -183,7 +237,16 @@ export default function MembershipUpgradePage() {
 
       const dokuData = await dokuRes.json().catch(() => null);
       if (dokuRes.ok && dokuData?.success && dokuData?.data?.payment_url) {
-        window.location.href = dokuData.data.payment_url;
+        const rawUrl = String(dokuData.data.payment_url);
+        const iframeUrl = rawUrl.includes("?") ? `${rawUrl}&view=iframe` : `${rawUrl}?view=iframe`;
+        setIframeLoaded(false);
+        setCheckoutPopup({
+          iframeUrl,
+          rawUrl,
+          orderId: dokuData.data.order_id || "",
+          targetLabel: option.label,
+          priceFormatted: option.price_formatted,
+        });
         return;
       }
 
@@ -436,7 +499,7 @@ export default function MembershipUpgradePage() {
                         ) : processing === option.level ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Mengarahkan ke DOKU...</span>
+                            <span>Membuka Pembayaran DOKU...</span>
                           </>
                         ) : (
                           <>
@@ -457,6 +520,67 @@ export default function MembershipUpgradePage() {
           )}
         </div>
       </div>
+
+      {checkoutPopup && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/55 backdrop-blur-[2px] flex items-center justify-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pembayaran DOKU Checkout"
+        >
+          <div className="relative w-full h-full sm:w-[500px] sm:max-w-[92vw] sm:h-[90vh] sm:max-h-[760px] bg-white sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-[#E8DFC8]">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#FAF8F5] border-b border-[#E8DFC8] shrink-0">
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-[#2C2416] flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-[#8C6B1C]" />
+                  <span>Pembayaran DOKU</span>
+                </p>
+                <p className="text-[11px] text-[#7A6E60] truncate">
+                  {checkoutPopup.targetLabel} &bull; {checkoutPopup.priceFormatted}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseCheckoutPopup}
+                className="w-8 h-8 rounded-xl bg-white border border-[#E8DFC8] hover:bg-[#F3ECE0] flex items-center justify-center text-[#5C5546] transition-colors cursor-pointer"
+                title="Tutup popup pembayaran"
+                aria-label="Tutup popup pembayaran"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative flex-1 bg-white">
+              {!iframeLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-white z-10">
+                  <Loader2 className="w-7 h-7 animate-spin text-[#C9A24A]" />
+                  <p className="text-xs font-medium text-[#7A6E60]">Memuat halaman pembayaran DOKU...</p>
+                </div>
+              )}
+              <iframe
+                src={checkoutPopup.iframeUrl}
+                title="DOKU Checkout Payment"
+                className="w-full h-full border-0 bg-white block"
+                allow="payment *"
+                onLoad={() => setIframeLoaded(true)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-2 bg-[#FAF8F5] border-t border-[#E8DFC8] text-[11px] text-[#7A6E60] shrink-0">
+              <span className="truncate font-mono">{checkoutPopup.orderId || "DOKU Checkout"}</span>
+              <a
+                href={checkoutPopup.rawUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-[#8C6B1C] hover:underline shrink-0 ml-3"
+              >
+                <span>Buka di tab baru</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
