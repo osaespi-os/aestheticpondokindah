@@ -3,11 +3,9 @@ import { useNavigate } from "react-router";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
-import { getSession } from "@/core/auth/services/session";
 import DashboardLayout from "@/core/layouts/DashboardLayout";
 import { logger } from "@/core/utils/logger";
 import { API_BASE } from "@/core/api/apiConfig";
-import { getPublicClinicSettings } from "@/features/guest/reservation/services/clinicSettingsApi";
 import {
   Crown,
   Sparkles,
@@ -18,9 +16,7 @@ import {
   ArrowLeft,
   Info,
   TrendingUp,
-  MessageSquare,
-  Building2,
-  CheckCircle2,
+  CreditCard,
   AlertCircle
 } from "lucide-react";
 
@@ -95,30 +91,12 @@ export default function MembershipUpgradePage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clinicPhone, setClinicPhone] = useState<string>("081990114949");
 
   const [unmetRequirements, setUnmetRequirements] = useState<Array<{ message: string; action: string }>>([]);
   const [showRequirementsDialog, setShowRequirementsDialog] = useState(false);
 
-  const [manualPayment, setManualPayment] = useState<{
-    orderId: string;
-    targetLevel: string;
-    targetLabel: string;
-    priceFormatted: string;
-    whatsappUrl: string;
-  } | null>(null);
-
-  const session = getSession();
-
   useEffect(() => {
     fetchUpgradeOptions();
-    getPublicClinicSettings()
-      .then((settings) => {
-        if (settings?.phone || settings?.whatsapp) {
-          setClinicPhone(settings.whatsapp || settings.phone || "081990114949");
-        }
-      })
-      .catch(() => {});
   }, []);
 
   const fetchUpgradeOptions = async () => {
@@ -209,65 +187,11 @@ export default function MembershipUpgradePage() {
         return;
       }
 
-      if (dokuRes.status !== 503 && dokuData?.code !== "DOKU_NOT_CONFIGURED") {
-        setError(dokuData?.message || "Gagal membuat tautan pembayaran DOKU. Silakan coba lagi.");
-        return;
-      }
-
-      let orderId = `UPG-${Date.now().toString().slice(-6)}`;
-
-      try {
-        const response = await fetch(`${API_BASE}/membership/request-upgrade`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            target_level: option.level,
-          }),
-        });
-        
-        const data = await response.json();
-        if (data.data?.id) {
-          orderId = `UPG-#${data.data.id}`;
-        }
-      } catch (reqErr) {
-        logger.warn("Request upgrade API notice:", reqErr);
-      }
-
-      const user: any = session?.user;
-      const userName = user?.name || "Pasien";
-      const userContact = user?.phone || user?.email || "-";
-      const cleanPhone = clinicPhone.replace(/\D/g, "").replace(/^0/, "62");
-
-      const waMessage = [
-        "Halo Admin Aesthetic Pondok Indah,",
-        "",
-        "Saya ingin mengajukan *Upgrade Membership* akun saya:",
-        `• *Nama*: ${userName}`,
-        `• *Email / No. HP*: ${userContact}`,
-        `• *Tier Saat Ini*: ${currentLabel || currentLevel.toUpperCase()}`,
-        `• *Target Upgrade*: ${option.label} (${option.price_formatted})`,
-        `• *Kode Referensi*: ${orderId}`,
-        "",
-        "Mohon petunjuk nomor rekening / QRIS pembayaran klinik untuk menyelesaikan upgrade membership. Terima kasih!",
-      ].join("\n");
-
-      const whatsappUrl = `https://wa.me/${cleanPhone || "6281990114949"}?text=${encodeURIComponent(waMessage)}`;
-
-      setManualPayment({
-        orderId,
-        targetLevel: option.level,
-        targetLabel: option.label,
-        priceFormatted: option.price_formatted,
-        whatsappUrl,
-      });
-
+      setError(dokuData?.message || "Gagal membuat tautan pembayaran DOKU. Silakan coba lagi.");
+      return;
     } catch (err) {
       logger.error("Upgrade error:", err);
-      setError("Terjadi kendala saat mengajukan upgrade. Silakan coba lagi.");
+      setError("Terjadi kendala saat menghubungkan ke DOKU Payment Gateway. Silakan coba lagi.");
     } finally {
       setProcessing(null);
     }
@@ -313,76 +237,6 @@ export default function MembershipUpgradePage() {
               >
                 Mengerti
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={manualPayment !== null} onOpenChange={(open) => !open && setManualPayment(null)}>
-          <DialogContent className="max-w-md bg-white rounded-3xl p-6 border border-[#E8DFC8] shadow-2xl">
-            <DialogHeader className="text-center sm:text-left">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 mb-2">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <DialogTitle className="text-base sm:text-lg font-black text-[#2C2416]">
-                Permohonan Upgrade Tercatat!
-              </DialogTitle>
-              <DialogDescription className="text-xs text-[#8C8272] mt-0.5">
-                Silakan hubungi Admin Klinik via WhatsApp untuk petunjuk transfer dan konfirmasi aktivasi tier Anda.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3.5 mt-2 text-xs">
-              <div className="p-4 bg-[#FAF8F5] rounded-2xl border border-[#EDE5D6] space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#8C8272]">Nomor Permohonan:</span>
-                  <span className="font-mono font-bold text-[#2C2416]">{manualPayment?.orderId}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#8C8272]">Target Tier:</span>
-                  <span className="font-bold text-[#8C6B1C]">{manualPayment?.targetLabel}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs border-t border-[#EDE5D6] pt-2">
-                  <span className="text-[#8C8272] font-semibold">Biaya Upgrade:</span>
-                  <span className="font-black text-sm text-[#2C2416]">{manualPayment?.priceFormatted}</span>
-                </div>
-              </div>
-
-              <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200 text-[11px] text-blue-900 space-y-1">
-                <p className="font-bold flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-700" />
-                  Alur Pembayaran & Aktivasi:
-                </p>
-                <ol className="list-decimal list-inside space-y-0.5 text-blue-800">
-                  <li>Klik tombol WhatsApp di bawah untuk chat Admin.</li>
-                  <li>Admin akan memberikan no. rekening / QRIS resmi klinik.</li>
-                  <li>Kirim bukti transfer, dan Admin akan langsung menaikkan tier akun Anda.</li>
-                </ol>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                {manualPayment?.whatsappUrl && (
-                  <Button
-                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95 transition-all touch-manipulation"
-                    onClick={() => {
-                      window.open(manualPayment.whatsappUrl, "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Lanjut ke WhatsApp Admin Klinik</span>
-                  </Button>
-                )}
-
-                <Button
-                  variant="outline"
-                  className="w-full h-9 rounded-xl border-[#E8DFC8] text-[#4A3F35] hover:bg-[#FAF8F5] text-xs font-semibold cursor-pointer"
-                  onClick={() => {
-                    setManualPayment(null);
-                    navigate("/membership");
-                  }}
-                >
-                  Lihat Status di Halaman Membership
-                </Button>
-              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -472,7 +326,7 @@ export default function MembershipUpgradePage() {
         <div className="p-3.5 bg-[#FAF8F5] border border-[#EADBBD] rounded-2xl text-xs text-[#5C5546] flex items-start gap-2.5">
           <Info className="w-4 h-4 text-[#8C6B1C] shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            Pembayaran upgrade membership dilakukan secara transfer manual dan diverifikasi langsung oleh Admin Klinik melalui WhatsApp resmi.
+            Pembayaran upgrade membership diproses secara online &amp; otomatis melalui DOKU Payment Gateway (Virtual Account, QRIS, E-Wallet, dan DOKU Wallet).
           </p>
         </div>
 
@@ -582,18 +436,18 @@ export default function MembershipUpgradePage() {
                         ) : processing === option.level ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Memproses Permohonan...</span>
+                            <span>Mengarahkan ke DOKU...</span>
                           </>
                         ) : (
                           <>
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>Ajukan Upgrade via WhatsApp</span>
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>Bayar &amp; Upgrade via DOKU</span>
                           </>
                         )}
                       </Button>
                       
                       <p className="text-[10px] text-[#8C8272] text-center mt-2">
-                        Pembayaran transfer manual ke rekening resmi klinik
+                        Pembayaran online aman &amp; otomatis melalui DOKU
                       </p>
                     </div>
                   </Card>
